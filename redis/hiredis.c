@@ -27,89 +27,90 @@
 #include <string.h>
 #include <git2.h>
 #include <git2/sys/odb_backend.h>
+#include <git2/sys/refdb_backend.h>
 #include <hiredis/hiredis.h>
 
 typedef struct {
-    git_odb_backend parent;
+	git_odb_backend parent;
 
-    const char *repo_path;
-    redisContext *db;
+	const char *repo_path;
+	redisContext *db;
 } hiredis_odb_backend;
 
 int hiredis_odb_backend__read_header(size_t *len_p, git_otype *type_p, git_odb_backend *_backend, const git_oid *oid)
 {
-    hiredis_odb_backend *backend;
-    int error;
-    redisReply *reply;
-    char *str_id = calloc(41, sizeof(char));
+	hiredis_odb_backend *backend;
+	int error;
+	redisReply *reply;
+	char *str_id = calloc(41, sizeof(char));
 
-    assert(len_p && type_p && _backend && oid);
+	assert(len_p && type_p && _backend && oid);
 
-    backend = (hiredis_odb_backend *) _backend;
-    error = GIT_ERROR;
+	backend = (hiredis_odb_backend *) _backend;
+	error = GIT_ERROR;
 
-    git_oid_tostr(str_id, 40, oid);
+	git_oid_tostr(str_id, 40, oid);
 
-    reply = redisCommand(backend->db, "HMGET rugged:%s:odb:%s %s %s", backend->repo_path, str_id, "type", "size");
-    free(str_id);
+	reply = redisCommand(backend->db, "HMGET rugged:%s:odb:%s %s %s", backend->repo_path, str_id, "type", "size");
+	free(str_id);
 
-    if (reply && reply->type == REDIS_REPLY_ARRAY) {
-        if (reply->element[0]->type != REDIS_REPLY_NIL &&
-                reply->element[0]->type != REDIS_REPLY_NIL) {
-            *type_p = (git_otype) atoi(reply->element[0]->str);
-            *len_p = (size_t) atoi(reply->element[1]->str);
-            error = GIT_OK;
-        } else {
-            error = GIT_ENOTFOUND;
-        }
-    } else {
-        error = GIT_ERROR;
-    }
+	if (reply && reply->type == REDIS_REPLY_ARRAY) {
+		if (reply->element[0]->type != REDIS_REPLY_NIL &&
+				reply->element[0]->type != REDIS_REPLY_NIL) {
+			*type_p = (git_otype) atoi(reply->element[0]->str);
+			*len_p = (size_t) atoi(reply->element[1]->str);
+			error = GIT_OK;
+		} else {
+			error = GIT_ENOTFOUND;
+		}
+	} else {
+		error = GIT_ERROR;
+	}
 
-    freeReplyObject(reply);
-    return error;
+	freeReplyObject(reply);
+	return error;
 }
 
 int hiredis_odb_backend__read(void **data_p, size_t *len_p, git_otype *type_p, git_odb_backend *_backend, const git_oid *oid)
 {
-    hiredis_odb_backend *backend;
-    int error;
-    redisReply *reply;
-    char *str_id = calloc(41, sizeof(char));
+	hiredis_odb_backend *backend;
+	int error;
+	redisReply *reply;
+	char *str_id = calloc(41, sizeof(char));
 
-    assert(data_p && len_p && type_p && _backend && oid);
+	assert(data_p && len_p && type_p && _backend && oid);
 
-    backend = (hiredis_odb_backend *) _backend;
-    error = GIT_ERROR;
+	backend = (hiredis_odb_backend *) _backend;
+	error = GIT_ERROR;
 
-    git_oid_tostr(str_id, 40, oid);
+	git_oid_tostr(str_id, 40, oid);
 
-    reply = redisCommand(backend->db, "HMGET rugged:%s:odb:%s %s %s %s", backend->repo_path, str_id,
-            "type", "size", "data");
-    free(str_id);
+	reply = redisCommand(backend->db, "HMGET rugged:%s:odb:%s %s %s %s", backend->repo_path, str_id,
+			"type", "size", "data");
+	free(str_id);
 
-    if (reply && reply->type == REDIS_REPLY_ARRAY) {
-        if (reply->element[0]->type != REDIS_REPLY_NIL &&
-                reply->element[1]->type != REDIS_REPLY_NIL &&
-                reply->element[2]->type != REDIS_REPLY_NIL) {
-            *type_p = (git_otype) atoi(reply->element[0]->str);
-            *len_p = (size_t) atoi(reply->element[1]->str);
-            *data_p = malloc(*len_p);
-            if (*data_p == NULL) {
-                error = GITERR_NOMEMORY;
-            } else {
-                memcpy(*data_p, reply->element[2]->str, *len_p);
-                error = GIT_OK;
-            }
-        } else {
-            error = GIT_ENOTFOUND;
-        }
-    } else {
-        error = GIT_ERROR;
-    }
+	if (reply && reply->type == REDIS_REPLY_ARRAY) {
+		if (reply->element[0]->type != REDIS_REPLY_NIL &&
+				reply->element[1]->type != REDIS_REPLY_NIL &&
+				reply->element[2]->type != REDIS_REPLY_NIL) {
+			*type_p = (git_otype) atoi(reply->element[0]->str);
+			*len_p = (size_t) atoi(reply->element[1]->str);
+			*data_p = malloc(*len_p);
+			if (*data_p == NULL) {
+				error = GITERR_NOMEMORY;
+			} else {
+				memcpy(*data_p, reply->element[2]->str, *len_p);
+				error = GIT_OK;
+			}
+		} else {
+			error = GIT_ENOTFOUND;
+		}
+	} else {
+		error = GIT_ERROR;
+	}
 
-    freeReplyObject(reply);
-    return error;
+	freeReplyObject(reply);
+	return error;
 }
 
 int hiredis_odb_backend__read_prefix(git_oid *out_oid,
@@ -131,96 +132,95 @@ int hiredis_odb_backend__read_prefix(git_oid *out_oid,
 
 int hiredis_odb_backend__exists(git_odb_backend *_backend, const git_oid *oid)
 {
-    hiredis_odb_backend *backend;
-    int found;
-    redisReply *reply;
-    char *str_id = calloc(41, sizeof(char));
+	hiredis_odb_backend *backend;
+	int found;
+	redisReply *reply;
+	char *str_id = calloc(41, sizeof(char));
 
-    assert(_backend && oid);
+	assert(_backend && oid);
 
-    backend = (hiredis_odb_backend *) _backend;
-    found = 0;
+	backend = (hiredis_odb_backend *) _backend;
+	found = 0;
 
-    git_oid_tostr(str_id, 40, oid);
+	git_oid_tostr(str_id, 40, oid);
 
-    reply = redisCommand(backend->db, "exists rugged:%s:odb:%s", backend->repo_path, str_id);
-    if (reply->type == REDIS_REPLY_INTEGER)
-        found = reply->integer;
+	reply = redisCommand(backend->db, "exists rugged:%s:odb:%s", backend->repo_path, str_id);
+	if (reply->type == REDIS_REPLY_INTEGER)
+		found = reply->integer;
 
-    free(str_id);
-    freeReplyObject(reply);
-    return found;
+	free(str_id);
+	freeReplyObject(reply);
+	return found;
 }
 
 int hiredis_odb_backend__write(git_odb_backend *_backend, const git_oid *oid, const void *data, size_t len, git_otype type)
 {
-    hiredis_odb_backend *backend;
-    int error;
-    redisReply *reply;
-    char *str_id = calloc(41, sizeof(char));
+	hiredis_odb_backend *backend;
+	int error;
+	redisReply *reply;
+	char *str_id = calloc(41, sizeof(char));
 
-    assert(oid && _backend && data);
+	assert(oid && _backend && data);
 
-    backend = (hiredis_odb_backend *) _backend;
-    error = GIT_ERROR;
+	backend = (hiredis_odb_backend *) _backend;
+	error = GIT_ERROR;
 
-    git_oid_tostr(str_id, 40, oid);
+	git_oid_tostr(str_id, 40, oid);
 
-    reply = redisCommand(backend->db, "HMSET rugged:%s:odb:%s "
-            "type %d "
-            "size %d "
-            "data %b ", backend->repo_path, str_id,
-            (int) type, len, data, len);
-    free(str_id);
+	reply = redisCommand(backend->db, "HMSET rugged:%s:odb:%s "
+			"type %d "
+			"size %d "
+			"data %b ", backend->repo_path, str_id,
+			(int) type, len, data, len);
+	free(str_id);
 
-    error = (reply == NULL || reply->type == REDIS_REPLY_ERROR) ? GIT_ERROR : GIT_OK;
+	error = (reply == NULL || reply->type == REDIS_REPLY_ERROR) ? GIT_ERROR : GIT_OK;
 
-    freeReplyObject(reply);
-    return error;
+	freeReplyObject(reply);
+	return error;
 }
 
 void hiredis_odb_backend__free(git_odb_backend *_backend)
 {
-    hiredis_odb_backend *backend;
+	hiredis_odb_backend *backend;
 
-    assert(_backend);
-    backend = (hiredis_odb_backend *) _backend;
+	assert(_backend);
+	backend = (hiredis_odb_backend *) _backend;
 
-    redisFree(backend->db);
+	redisFree(backend->db);
 
-    free(backend);
+	free(backend);
 }
 
 int git_odb_backend_hiredis(git_odb_backend **backend_out, const char* path, const char *host, int port)
 {
-    hiredis_odb_backend *backend;
+	hiredis_odb_backend *backend;
 
-    backend = calloc(1, sizeof (hiredis_odb_backend));
-    if (backend == NULL)
-        return GITERR_NOMEMORY;
+	backend = calloc(1, sizeof (hiredis_odb_backend));
+	if (backend == NULL)
+		return GITERR_NOMEMORY;
 
-    backend->db = redisConnect(host, port);
-    if (backend->db->err) {
+	backend->db = redisConnect(host, port);
+	if (backend->db->err) {
 		free(backend);
 		return GIT_ERROR;
 	}
 
-    backend->repo_path = path;
+	backend->repo_path = path;
 
-    backend->parent.version = 1;
+	backend->parent.version = 1;
 
-    backend->parent.read = &hiredis_odb_backend__read;
-    backend->parent.write = &hiredis_odb_backend__write;
-    backend->parent.read_prefix = &hiredis_odb_backend__read_prefix;
-    backend->parent.read_header = &hiredis_odb_backend__read_header;
-    backend->parent.exists = &hiredis_odb_backend__exists;
-    backend->parent.free = &hiredis_odb_backend__free;
+	backend->parent.read = &hiredis_odb_backend__read;
+	backend->parent.write = &hiredis_odb_backend__write;
+	backend->parent.read_prefix = &hiredis_odb_backend__read_prefix;
+	backend->parent.read_header = &hiredis_odb_backend__read_header;
+	backend->parent.exists = &hiredis_odb_backend__exists;
+	backend->parent.free = &hiredis_odb_backend__free;
 
-    backend->parent.writestream = NULL;
-    backend->parent.foreach = NULL;
+	backend->parent.writestream = NULL;
+	backend->parent.foreach = NULL;
 
-    *backend_out = (git_odb_backend *) backend;
+	*backend_out = (git_odb_backend *) backend;
 
-    return GIT_OK;
+	return GIT_OK;
 }
-
