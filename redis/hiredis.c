@@ -45,6 +45,15 @@ typedef struct {
 	redisContext *db;
 } hiredis_refdb_backend;
 
+typedef struct {
+	git_reference_iterator parent;
+
+	size_t current;
+	redisReply *keys;
+
+	hiredis_refdb_backend *backend;
+} hiredis_refdb_iterator;
+
 /* Odb methods */
 
 int hiredis_odb_backend__read_header(size_t *len_p, git_otype *type_p, git_odb_backend *_backend, const git_oid *oid)
@@ -262,11 +271,84 @@ int hiredis_refdb_backend__lookup(git_reference **out, git_refdb_backend *_backe
 	return error;
 }
 
-int hiredis_refdb_backend__iterator(git_reference_iterator **iter, struct git_refdb_backend *_backend, const char *glob)
-{
-	printf("[REDIS] Iterate through references %s\n", glob);
+int hiredis_refdb_backend__iterator_next(git_reference **ref, git_reference_iterator *_iter) {
+	hiredis_refdb_iterator *iter;
+	hiredis_refdb_backend *backend;
+	char* ref_name;
+	int error;
 
-	return GIT_ERROR;
+	assert(_iter);
+	iter = (hiredis_refdb_iterator *) _iter;
+
+	printf("[REDIS] Next reference (current: %ld)\n", iter->current);
+
+	if(iter->current < iter->keys->elements) {
+		ref_name = strstr(iter->keys->element[iter->current++]->str, ":refdb:") + 7;
+		error = hiredis_refdb_backend__lookup(ref, (git_refdb_backend *) iter->backend, ref_name);
+
+		return error;
+	} else {
+		return GIT_ITEROVER;
+	}
+}
+
+int hiredis_refdb_backend__iterator_next_name(const char **ref_name, git_reference_iterator *_iter) {
+	hiredis_refdb_iterator *iter;
+
+	assert(_iter);
+	iter = (hiredis_refdb_iterator *) _iter;
+
+	printf("[REDIS] Next reference name (current: %ld)\n", iter->current);
+
+	if(iter->current < iter->keys->elements) {
+		*ref_name = strdup(strstr(iter->keys->element[iter->current++]->str, ":refdb:") + 7);
+
+		return GIT_OK;
+	} else {
+		return GIT_ITEROVER;
+	}
+}
+
+void hiredis_refdb_backend__iterator_free(git_reference_iterator *_iter) {
+	hiredis_refdb_iterator *iter;
+
+	assert(_iter);
+	iter = (hiredis_refdb_iterator *) _iter;
+
+	freeReplyObject(iter->keys);
+
+	free(iter);
+}
+
+int hiredis_refdb_backend__iterator(git_reference_iterator **_iter, struct git_refdb_backend *_backend, const char *glob)
+{
+	hiredis_refdb_backend *backend;
+	hiredis_refdb_iterator *iterator;
+	int error = GIT_OK;
+	redisReply *reply;
+
+	assert(_backend);
+
+	backend = (hiredis_refdb_backend *) _backend;
+
+	reply = redisCommand(backend->db, "KEYS rugged:%s:refdb:%s", backend->repo_path, (glob != NULL ? glob : "*"));
+	if(reply->type != REDIS_REPLY_ARRAY) {
+		freeReplyObject(reply);
+		return GIT_ERROR;
+	}
+
+	iterator = calloc(1, sizeof(hiredis_refdb_iterator));
+
+	iterator->backend = backend;
+	iterator->keys = reply;
+
+	iterator->parent.next = &hiredis_refdb_backend__iterator_next;
+	iterator->parent.next_name = &hiredis_refdb_backend__iterator_next_name;
+	iterator->parent.free = &hiredis_refdb_backend__iterator_free;
+
+	*_iter = (git_reference_iterator *) iterator;
+
+	return GIT_OK;
 }
 
 int hiredis_refdb_backend__write(git_refdb_backend *_backend, const git_reference *ref, int force, const git_signature *who,
@@ -288,7 +370,7 @@ int hiredis_refdb_backend__write(git_refdb_backend *_backend, const git_referenc
 	target = git_reference_target(ref);
 	symbolic_target = git_reference_symbolic_target(ref);
 
-	/* FIXME handle force */
+	/* FIXME handle force correctly */
 
 	if (target) {
 		git_oid_nfmt(oid_str, sizeof(oid_str), target);
