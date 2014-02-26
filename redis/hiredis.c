@@ -73,7 +73,6 @@ int hiredis_odb_backend__read_header(size_t *len_p, git_otype *type_p, git_odb_b
 	git_oid_tostr(str_id, GIT_OID_HEXSZ, oid);
 
 	reply = redisCommand(backend->db, "HMGET %s:%s:odb:%s %s %s", backend->prefix, backend->repo_path, str_id, "type", "size");
-	free(str_id);
 
 	if (reply && reply->type == REDIS_REPLY_ARRAY) {
 		if (reply->element[0]->type != REDIS_REPLY_NIL &&
@@ -82,12 +81,15 @@ int hiredis_odb_backend__read_header(size_t *len_p, git_otype *type_p, git_odb_b
 			*len_p = (size_t) atoi(reply->element[1]->str);
 			error = GIT_OK;
 		} else {
+			giterr_set_str(GITERR_ODB, "Redis odb storage corrupted");
 			error = GIT_ENOTFOUND;
 		}
 	} else {
+		giterr_set_str(GITERR_ODB, "Redis odb storage error");
 		error = GIT_ERROR;
 	}
 
+	free(str_id);
 	freeReplyObject(reply);
 	return error;
 }
@@ -108,7 +110,6 @@ int hiredis_odb_backend__read(void **data_p, size_t *len_p, git_otype *type_p, g
 
 	reply = redisCommand(backend->db, "HMGET %s:%s:odb:%s %s %s %s", backend->prefix, backend->repo_path, str_id,
 			"type", "size", "data");
-	free(str_id);
 
 	if (reply && reply->type == REDIS_REPLY_ARRAY) {
 		if (reply->element[0]->type != REDIS_REPLY_NIL &&
@@ -124,12 +125,15 @@ int hiredis_odb_backend__read(void **data_p, size_t *len_p, git_otype *type_p, g
 				error = GIT_OK;
 			}
 		} else {
+			giterr_set_str(GITERR_ODB, "Redis odb couldn't find object");
 			error = GIT_ENOTFOUND;
 		}
 	} else {
+		giterr_set_str(GITERR_ODB, "Redis odb storage error");
 		error = GIT_ERROR;
 	}
 
+	free(str_id);
 	freeReplyObject(reply);
 	return error;
 }
@@ -148,6 +152,7 @@ int hiredis_odb_backend__read_prefix(git_oid *out_oid,
 	}
 
 	/* TODO prefix */
+	giterr_set_str(GITERR_ODB, "Redis odb doesn't not implement oid prefix lookup");
 	return GITERR_INVALID;
 }
 
@@ -226,10 +231,12 @@ int hiredis_refdb_backend__exists(int *exists, git_refdb_backend *_backend, cons
 	backend = (hiredis_refdb_backend *) _backend;
 
 	reply = redisCommand(backend->db, "EXISTS %s:%s:refdb:%s", backend->prefix, backend->repo_path, ref_name);
-	if (reply->type == REDIS_REPLY_INTEGER)
+	if (reply->type == REDIS_REPLY_INTEGER) {
 		*exists = reply->integer;
-	else
+	} else {
+		giterr_set_str(GITERR_REFERENCE, "Redis refdb storage error");
 		error = GIT_ERROR;
+	}
 
 	freeReplyObject(reply);
 	return error;
@@ -257,13 +264,16 @@ int hiredis_refdb_backend__lookup(git_reference **out, git_refdb_backend *_backe
 			} else if (type == GIT_REF_SYMBOLIC) {
 				*out = git_reference__alloc_symbolic(ref_name, reply->element[1]->str);
 			} else {
+				giterr_set_str(GITERR_REFERENCE, "Redis refdb storage corrupted (unknown ref type returned)");
 				error = GIT_ERROR;
 			}
 
 		} else {
+			giterr_set_str(GITERR_REFERENCE, "Redis refdb couldn't find ref");
 			error = GIT_ENOTFOUND;
 		}
 	} else {
+		giterr_set_str(GITERR_REFERENCE, "Redis refdb storage error");
 		error = GIT_ERROR;
 	}
 
@@ -330,6 +340,7 @@ int hiredis_refdb_backend__iterator(git_reference_iterator **_iter, struct git_r
 	reply = redisCommand(backend->db, "KEYS %s:%s:refdb:%s", backend->prefix, backend->repo_path, (glob != NULL ? glob : "*"));
 	if(reply->type != REDIS_REPLY_ARRAY) {
 		freeReplyObject(reply);
+		giterr_set_str(GITERR_REFERENCE, "Redis refdb storage error");
 		return GIT_ERROR;
 	}
 
@@ -376,8 +387,10 @@ int hiredis_refdb_backend__write(git_refdb_backend *_backend, const git_referenc
 		reply = redisCommand(backend->db, "HMSET %s:%s:refdb:%s type %d target %s", backend->prefix, backend->repo_path, name, GIT_REF_SYMBOLIC, symbolic_target);
 	}
 
-	if(reply->type == REDIS_REPLY_ERROR)
+	if(reply->type == REDIS_REPLY_ERROR) {
+		giterr_set_str(GITERR_REFERENCE, "Redis refdb storage error");
 		error = GIT_ERROR;
+	}
 
 	freeReplyObject(reply);
 	return error;
@@ -398,6 +411,8 @@ int hiredis_refdb_backend__rename(git_reference **out, git_refdb_backend *_backe
 						backend->prefix, backend->repo_path, old_name, backend->prefix, backend->repo_path, new_name);
 	if(reply->type == REDIS_REPLY_ERROR) {
 		freeReplyObject(reply);
+
+		giterr_set_str(GITERR_REFERENCE, "Redis refdb storage error");
 		return GIT_ERROR;
 	}
 
@@ -416,8 +431,10 @@ int hiredis_refdb_backend__del(git_refdb_backend *_backend, const char *ref_name
 	backend = (hiredis_refdb_backend *) _backend;
 
 	reply = redisCommand(backend->db, "DEL %s:%s:refdb:%s", backend->prefix, backend->repo_path, ref_name);
-	if(reply->type == REDIS_REPLY_ERROR)
+	if(reply->type == REDIS_REPLY_ERROR) {
+		giterr_set_str(GITERR_REFERENCE, "Redis refdb storage error");
 		error = GIT_ERROR;
+	}
 
 	freeReplyObject(reply);
 	return error;
@@ -480,6 +497,7 @@ int git_odb_backend_hiredis(git_odb_backend **backend_out, const char* prefix, c
 	backend->db = redisConnect(host, port);
 	if (backend->db->err) {
 		free(backend);
+		giterr_set_str(GITERR_REFERENCE, "Redis refdb storage couldn't connect to redis server");
 		return GIT_ERROR;
 	}
 
@@ -514,6 +532,7 @@ int git_refdb_backend_hiredis(git_refdb_backend **backend_out, const char* prefi
 	backend-> db = redisConnect(host, port);
 	if (backend->db->err) {
 		free(backend);
+		giterr_set_str(GITERR_REFERENCE, "Redis refdb storage couldn't connect to redis server");
 		return GIT_ERROR;
 	}
 
