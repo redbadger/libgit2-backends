@@ -449,7 +449,14 @@ int hiredis_refdb_backend__ensure_log(git_refdb_backend *_backend, const char *r
 
 void hiredis_refdb_backend__free(git_refdb_backend *_backend)
 {
-	printf("[REDIS] Free ref backend log\n");
+	hiredis_refdb_backend *backend;
+
+	assert(_backend);
+	backend = (hiredis_refdb_backend *) _backend;
+
+	redisFree(backend->db);
+
+	free(backend);
 }
 
 int hiredis_refdb_backend__reflog_read(git_reflog **out, git_refdb_backend *_backend, const char *name)
