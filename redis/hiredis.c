@@ -250,11 +250,9 @@ int hiredis_refdb_backend__lookup(git_reference **out, git_refdb_backend *_backe
 			git_ref_t type = (git_ref_t) atoi(reply->element[0]->str);
 
 			if (type == GIT_REF_OID) {
-				printf("[REDIS] Found (oid) %s -> %s\n", ref_name, reply->element[1]->str);
 				git_oid_fromstr(&oid, reply->element[1]->str);
 				*out = git_reference__alloc(ref_name, &oid, NULL);
 			} else if (type == GIT_REF_SYMBOLIC) {
-				printf("[REDIS] Found (symbolic) %s -> %s\n", ref_name, reply->element[1]->str);
 				*out = git_reference__alloc_symbolic(ref_name, reply->element[1]->str);
 			} else {
 				error = GIT_ERROR;
@@ -280,8 +278,6 @@ int hiredis_refdb_backend__iterator_next(git_reference **ref, git_reference_iter
 	assert(_iter);
 	iter = (hiredis_refdb_iterator *) _iter;
 
-	printf("[REDIS] Next reference (current: %ld)\n", iter->current);
-
 	if(iter->current < iter->keys->elements) {
 		ref_name = strstr(iter->keys->element[iter->current++]->str, ":refdb:") + 7;
 		error = hiredis_refdb_backend__lookup(ref, (git_refdb_backend *) iter->backend, ref_name);
@@ -297,8 +293,6 @@ int hiredis_refdb_backend__iterator_next_name(const char **ref_name, git_referen
 
 	assert(_iter);
 	iter = (hiredis_refdb_iterator *) _iter;
-
-	printf("[REDIS] Next reference name (current: %ld)\n", iter->current);
 
 	if(iter->current < iter->keys->elements) {
 		*ref_name = strdup(strstr(iter->keys->element[iter->current++]->str, ":refdb:") + 7);
@@ -398,8 +392,6 @@ int hiredis_refdb_backend__rename(git_reference **out, git_refdb_backend *_backe
 
 	backend = (hiredis_refdb_backend *) _backend;
 
-	printf("[REDIS] Rename reference %s -> %s\n", old_name, new_name);
-
 	reply = redisCommand(backend->db, "RENAME rugged:%s:refdb:%s rugged:%s:refdb:%s",
 						backend->repo_path, old_name, backend->repo_path, new_name);
 	if(reply->type == REDIS_REPLY_ERROR) {
@@ -421,30 +413,12 @@ int hiredis_refdb_backend__del(git_refdb_backend *_backend, const char *ref_name
 
 	backend = (hiredis_refdb_backend *) _backend;
 
-	printf("[REDIS] Delete reference %s\n", ref_name);
-
 	reply = redisCommand(backend->db, "DEL rugged:%s:refdb:%s", backend->repo_path, ref_name);
 	if(reply->type == REDIS_REPLY_ERROR)
 		error = GIT_ERROR;
 
 	freeReplyObject(reply);
 	return error;
-}
-
-/* reflog methods */
-
-int hiredis_refdb_backend__has_log(git_refdb_backend *_backend, const char *refname)
-{
-	printf("[REDIS] Reference has log? %s\n", refname);
-
-	return GIT_ERROR;
-}
-
-int hiredis_refdb_backend__ensure_log(git_refdb_backend *_backend, const char *refname)
-{
-	printf("[REDIS] Reference ensure log %s\n", refname);
-
-	return GIT_ERROR;
 }
 
 void hiredis_refdb_backend__free(git_refdb_backend *_backend)
@@ -459,31 +433,35 @@ void hiredis_refdb_backend__free(git_refdb_backend *_backend)
 	free(backend);
 }
 
+/* reflog methods */
+
+int hiredis_refdb_backend__has_log(git_refdb_backend *_backend, const char *refname)
+{
+	return 0;
+}
+
+int hiredis_refdb_backend__ensure_log(git_refdb_backend *_backend, const char *refname)
+{
+	return GIT_ERROR;
+}
+
 int hiredis_refdb_backend__reflog_read(git_reflog **out, git_refdb_backend *_backend, const char *name)
 {
-	printf("[REDIS] Reference read log %s\n", name);
-
 	return GIT_ERROR;
 }
 
 int hiredis_refdb_backend__reflog_write(git_refdb_backend *_backend, git_reflog *reflog)
 {
-	printf("[REDIS] Reference write log\n");
-
 	return GIT_ERROR;
 }
 
 int hiredis_refdb_backend__reflog_rename(git_refdb_backend *_backend, const char *old_name, const char *new_name)
 {
-	printf("[REDIS] Reference rename log %s -> %s\n", old_name, new_name);
-
 	return GIT_ERROR;
 }
 
 int hiredis_refdb_backend__reflog_delete(git_refdb_backend *_backend, const char *name)
 {
-	printf("[REDIS] Reference delete log %s\n", name);
-
 	return GIT_ERROR;
 }
 
