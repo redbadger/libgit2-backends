@@ -34,6 +34,7 @@
 typedef struct {
 	git_odb_backend parent;
 
+	const char *prefix;
 	const char *repo_path;
 	redisContext *db;
 } hiredis_odb_backend;
@@ -41,6 +42,7 @@ typedef struct {
 typedef struct {
 	git_refdb_backend parent;
 
+	const char *prefix;
 	const char *repo_path;
 	redisContext *db;
 } hiredis_refdb_backend;
@@ -70,7 +72,7 @@ int hiredis_odb_backend__read_header(size_t *len_p, git_otype *type_p, git_odb_b
 
 	git_oid_tostr(str_id, GIT_OID_HEXSZ, oid);
 
-	reply = redisCommand(backend->db, "HMGET rugged:%s:odb:%s %s %s", backend->repo_path, str_id, "type", "size");
+	reply = redisCommand(backend->db, "HMGET %s:%s:odb:%s %s %s", backend->prefix, backend->repo_path, str_id, "type", "size");
 	free(str_id);
 
 	if (reply && reply->type == REDIS_REPLY_ARRAY) {
@@ -104,7 +106,7 @@ int hiredis_odb_backend__read(void **data_p, size_t *len_p, git_otype *type_p, g
 
 	git_oid_tostr(str_id, GIT_OID_HEXSZ, oid);
 
-	reply = redisCommand(backend->db, "HMGET rugged:%s:odb:%s %s %s %s", backend->repo_path, str_id,
+	reply = redisCommand(backend->db, "HMGET %s:%s:odb:%s %s %s %s", backend->prefix, backend->repo_path, str_id,
 			"type", "size", "data");
 	free(str_id);
 
@@ -163,7 +165,7 @@ int hiredis_odb_backend__exists(git_odb_backend *_backend, const git_oid *oid)
 
 	git_oid_tostr(str_id, GIT_OID_HEXSZ, oid);
 
-	reply = redisCommand(backend->db, "exists rugged:%s:odb:%s", backend->repo_path, str_id);
+	reply = redisCommand(backend->db, "exists %s:%s:odb:%s", backend->prefix, backend->repo_path, str_id);
 	if (reply->type == REDIS_REPLY_INTEGER)
 		found = reply->integer;
 
@@ -186,10 +188,10 @@ int hiredis_odb_backend__write(git_odb_backend *_backend, const git_oid *oid, co
 
 	git_oid_tostr(str_id, GIT_OID_HEXSZ, oid);
 
-	reply = redisCommand(backend->db, "HMSET rugged:%s:odb:%s "
+	reply = redisCommand(backend->db, "HMSET %s:%s:odb:%s "
 			"type %d "
 			"size %d "
-			"data %b ", backend->repo_path, str_id,
+			"data %b ", backend->prefix, backend->repo_path, str_id,
 			(int) type, len, data, len);
 	free(str_id);
 
@@ -223,7 +225,7 @@ int hiredis_refdb_backend__exists(int *exists, git_refdb_backend *_backend, cons
 
 	backend = (hiredis_refdb_backend *) _backend;
 
-	reply = redisCommand(backend->db, "EXISTS rugged:%s:refdb:%s", backend->repo_path, ref_name);
+	reply = redisCommand(backend->db, "EXISTS %s:%s:refdb:%s", backend->prefix, backend->repo_path, ref_name);
 	if (reply->type == REDIS_REPLY_INTEGER)
 		*exists = reply->integer;
 	else
@@ -244,7 +246,7 @@ int hiredis_refdb_backend__lookup(git_reference **out, git_refdb_backend *_backe
 
 	backend = (hiredis_refdb_backend *) _backend;
 
-	reply = redisCommand(backend->db, "HMGET rugged:%s:refdb:%s type target", backend->repo_path, ref_name);
+	reply = redisCommand(backend->db, "HMGET %s:%s:refdb:%s type target", backend->prefix, backend->repo_path, ref_name);
 	if(reply->type == REDIS_REPLY_ARRAY) {
 		if (reply->element[0]->type != REDIS_REPLY_NIL && reply->element[1]->type != REDIS_REPLY_NIL) {
 			git_ref_t type = (git_ref_t) atoi(reply->element[0]->str);
@@ -325,7 +327,7 @@ int hiredis_refdb_backend__iterator(git_reference_iterator **_iter, struct git_r
 
 	backend = (hiredis_refdb_backend *) _backend;
 
-	reply = redisCommand(backend->db, "KEYS rugged:%s:refdb:%s", backend->repo_path, (glob != NULL ? glob : "*"));
+	reply = redisCommand(backend->db, "KEYS %s:%s:refdb:%s", backend->prefix, backend->repo_path, (glob != NULL ? glob : "*"));
 	if(reply->type != REDIS_REPLY_ARRAY) {
 		freeReplyObject(reply);
 		return GIT_ERROR;
@@ -368,10 +370,10 @@ int hiredis_refdb_backend__write(git_refdb_backend *_backend, const git_referenc
 
 	if (target) {
 		git_oid_nfmt(oid_str, sizeof(oid_str), target);
-		reply = redisCommand(backend->db, "HMSET rugged:%s:refdb:%s type %d target %s", backend->repo_path, name, GIT_REF_OID, oid_str);
+		reply = redisCommand(backend->db, "HMSET %s:%s:refdb:%s type %d target %s", backend->prefix, backend->repo_path, name, GIT_REF_OID, oid_str);
 	} else {
 		symbolic_target = git_reference_symbolic_target(ref);
-		reply = redisCommand(backend->db, "HMSET rugged:%s:refdb:%s type %d target %s", backend->repo_path, name, GIT_REF_SYMBOLIC, symbolic_target);
+		reply = redisCommand(backend->db, "HMSET %s:%s:refdb:%s type %d target %s", backend->prefix, backend->repo_path, name, GIT_REF_SYMBOLIC, symbolic_target);
 	}
 
 	if(reply->type == REDIS_REPLY_ERROR)
@@ -392,8 +394,8 @@ int hiredis_refdb_backend__rename(git_reference **out, git_refdb_backend *_backe
 
 	backend = (hiredis_refdb_backend *) _backend;
 
-	reply = redisCommand(backend->db, "RENAME rugged:%s:refdb:%s rugged:%s:refdb:%s",
-						backend->repo_path, old_name, backend->repo_path, new_name);
+	reply = redisCommand(backend->db, "RENAME %s:%s:refdb:%s %s:%s:refdb:%s",
+						backend->prefix, backend->repo_path, old_name, backend->prefix, backend->repo_path, new_name);
 	if(reply->type == REDIS_REPLY_ERROR) {
 		freeReplyObject(reply);
 		return GIT_ERROR;
@@ -413,7 +415,7 @@ int hiredis_refdb_backend__del(git_refdb_backend *_backend, const char *ref_name
 
 	backend = (hiredis_refdb_backend *) _backend;
 
-	reply = redisCommand(backend->db, "DEL rugged:%s:refdb:%s", backend->repo_path, ref_name);
+	reply = redisCommand(backend->db, "DEL %s:%s:refdb:%s", backend->prefix, backend->repo_path, ref_name);
 	if(reply->type == REDIS_REPLY_ERROR)
 		error = GIT_ERROR;
 
@@ -467,7 +469,7 @@ int hiredis_refdb_backend__reflog_delete(git_refdb_backend *_backend, const char
 
 /* Constructors */
 
-int git_odb_backend_hiredis(git_odb_backend **backend_out, const char* path, const char *host, int port)
+int git_odb_backend_hiredis(git_odb_backend **backend_out, const char* prefix, const char* path, const char *host, int port)
 {
 	hiredis_odb_backend *backend;
 
@@ -481,6 +483,7 @@ int git_odb_backend_hiredis(git_odb_backend **backend_out, const char* path, con
 		return GIT_ERROR;
 	}
 
+	backend->prefix = prefix;
 	backend->repo_path = path;
 
 	backend->parent.version = 1;
@@ -500,7 +503,7 @@ int git_odb_backend_hiredis(git_odb_backend **backend_out, const char* path, con
 	return GIT_OK;
 }
 
-int git_refdb_backend_hiredis(git_refdb_backend **backend_out, const char* path, const char *host, int port)
+int git_refdb_backend_hiredis(git_refdb_backend **backend_out, const char* prefix, const char* path, const char *host, int port)
 {
 	hiredis_refdb_backend *backend;
 
@@ -514,6 +517,7 @@ int git_refdb_backend_hiredis(git_refdb_backend **backend_out, const char* path,
 		return GIT_ERROR;
 	}
 
+	backend->prefix = prefix;
 	backend->repo_path = path;
 
 	backend->parent.exists = &hiredis_refdb_backend__exists;
