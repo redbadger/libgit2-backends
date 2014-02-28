@@ -358,8 +358,7 @@ int hiredis_refdb_backend__iterator(git_reference_iterator **_iter, struct git_r
 	return GIT_OK;
 }
 
-int hiredis_refdb_backend__write(git_refdb_backend *_backend, const git_reference *ref, int force, const git_signature *who,
-	const char *message) // FIXME when rugged gets updated to the latest libgit2 update this to the latest backend API
+int hiredis_refdb_backend__write(git_refdb_backend *_backend, const git_reference *ref, int force) // FIXME when rugged gets updated to the latest libgit2 update this to the latest backend API
 {
 	hiredis_refdb_backend *backend;
 	int error = GIT_OK;
@@ -396,8 +395,7 @@ int hiredis_refdb_backend__write(git_refdb_backend *_backend, const git_referenc
 	return error;
 }
 
-int hiredis_refdb_backend__rename(git_reference **out, git_refdb_backend *_backend, const char *old_name,
-	const char *new_name, int force, const git_signature *who, const char *message)
+int hiredis_refdb_backend__rename(git_reference **out, git_refdb_backend *_backend, const char *old_name, const char *new_name, int force)
 {
 	hiredis_refdb_backend *backend;
 	int error = GIT_OK;
@@ -548,8 +546,6 @@ int git_refdb_backend_hiredis(git_refdb_backend **backend_out, const char* prefi
 	backend->parent.compress = NULL;
 	backend->parent.free = &hiredis_refdb_backend__free;
 
-	backend->parent.has_log = &hiredis_refdb_backend__has_log;
-	backend->parent.ensure_log = &hiredis_refdb_backend__ensure_log;
 	backend->parent.reflog_read = &hiredis_refdb_backend__reflog_read;
 	backend->parent.reflog_write = &hiredis_refdb_backend__reflog_write;
 	backend->parent.reflog_rename = &hiredis_refdb_backend__reflog_rename;
