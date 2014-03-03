@@ -1,13 +1,15 @@
 PROJECT(libgit2-redis C)
 CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
 
-INCLUDE(../CMake/FindHiredis.cmake)
 
 # Build options
 OPTION (BUILD_SHARED_LIBS "Build Shared Library (OFF for Static)" ON)
 OPTION (BUILD_TESTS "Build Tests" ON)
 SET (PC_LIBGIT2_LIBRARY_DIRS "" CACHE STRING "libgit2 path")
 SET (PC_LIBGIT2_INCLUDE_DIRS "" CACHE STRING "libgit2 include directories")
+SET (PC_LIBHIREDIS_LIBRARY_DIRS "" CACHE STRING "libhiredis path")
+SET (PC_LIBHIREDIS_INCLUDE_DIRS "" CACHE STRING "libhiredis include directories")
+
 
 # Allow overriding to local libgit2. I'm pretty sure I'm doing this wrong.
 IF (${PC_LIBGIT2_INCLUDE_DIRS} STREQUAL "")
@@ -15,6 +17,13 @@ IF (${PC_LIBGIT2_INCLUDE_DIRS} STREQUAL "")
 ELSE ()
   SET (LIBGIT2_LIBRARIES ${PC_LIBGIT2_LIBRARY_DIRS})
   SET (LIBGIT2_INCLUDE_DIRS ${PC_LIBGIT2_INCLUDE_DIRS})
+ENDIF ()
+
+IF (${PC_LIBHIREDIS_INCLUDE_DIRS} STREQUAL "")
+  INCLUDE(../CMake/FindHiredis.cmake)
+ELSE ()
+  SET (LIBHIREDIS_LIBRARIES ${PC_LIBHIREDIS_LIBRARY_DIRS})
+  SET (LIBHIREDIS_INCLUDE_DIRS ${PC_LIBHIREDIS_INCLUDE_DIRS})
 ENDIF ()
 
 # Build Release by default
