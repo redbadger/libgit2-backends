@@ -29,7 +29,7 @@
 #include <git2/sys/odb_backend.h>
 #include <git2/sys/refdb_backend.h>
 #include <git2/sys/refs.h>
-#include <hiredis/hiredis.h>
+#include <hiredis.h>
 
 typedef struct {
 	git_odb_backend parent;
