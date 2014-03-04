@@ -1,0 +1,51 @@
+PLATFORM=$(shell uname -s)
+
+ifneq (,$(CROSS_COMPILE))
+  PREFIX=$(CROSS_COMPILE)-
+else
+  PREFIX=
+endif
+
+MINGW=0
+ifneq (,$(findstring MINGW32,$(PLATFORM)))
+  MINGW=1
+endif
+ifneq (,$(findstring mingw,$(CROSS_COMPILE)))
+  MINGW=1
+endif
+
+rm=rm -f
+LIBNAME=libgit2-redis.a
+
+ifeq ($(MINGW),1)
+  CC=gcc
+else
+  CC=cc
+endif
+
+CC:=$(PREFIX)$(CC)
+
+INCLUDES= -I../../libgit2/include -I../../hiredis
+
+DEFINES= $(INCLUDES)
+CFLAGS= -g $(DEFINES) -Wall -Wextra -Wno-missing-field-initializers -O2 $(EXTRA_CFLAGS)
+SRCS = hiredis.c
+
+ifeq ($(MINGW),1)
+  DEFINES += -DWIN32 -D_WIN32_WINNT=0x0501 -D__USE_MINGW_ANSI_STDIO=1
+else
+  CFLAGS += -fPIC
+endif
+
+OBJS = $(patsubst %.c,%.o,$(SRCS))
+
+%.c.o:
+	$(CC) $(CFLAGS) -c $*.c
+
+all: $(LIBNAME)
+
+$(LIBNAME): $(OBJS)
+	$(rm) $@
+
+clean:
+	$(rm) $(OBJS) $(LIBNAME)
