@@ -283,7 +283,6 @@ int hiredis_refdb_backend__lookup(git_reference **out, git_refdb_backend *_backe
 
 int hiredis_refdb_backend__iterator_next(git_reference **ref, git_reference_iterator *_iter) {
 	hiredis_refdb_iterator *iter;
-	hiredis_refdb_backend *backend;
 	char* ref_name;
 	int error;
 
@@ -330,7 +329,6 @@ int hiredis_refdb_backend__iterator(git_reference_iterator **_iter, struct git_r
 {
 	hiredis_refdb_backend *backend;
 	hiredis_refdb_iterator *iterator;
-	int error = GIT_OK;
 	redisReply *reply;
 
 	assert(_backend);
@@ -400,7 +398,6 @@ int hiredis_refdb_backend__rename(git_reference **out, git_refdb_backend *_backe
 	const char *new_name, int force, const git_signature *who, const char *message)
 {
 	hiredis_refdb_backend *backend;
-	int error = GIT_OK;
 	redisReply *reply;
 
 	assert(old_name && new_name && _backend);

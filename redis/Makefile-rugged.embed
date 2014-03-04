@@ -15,6 +15,7 @@ ifneq (,$(findstring mingw,$(CROSS_COMPILE)))
 endif
 
 rm=rm -f
+AR=$(PREFIX)ar cq
 LIBNAME=libgit2-redis.a
 
 ifeq ($(MINGW),1)
@@ -46,6 +47,7 @@ all: $(LIBNAME)
 
 $(LIBNAME): $(OBJS)
 	$(rm) $@
+	$(AR) $@ $(OBJS)
 
 clean:
 	$(rm) $(OBJS) $(LIBNAME)
